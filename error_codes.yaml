@@ -1,0 +1,81 @@
+1001:
+  message: "Critical battery level: below 10%. Automatic battery shutoff may occur."
+  level: "critical"
+1002:
+  message: "Low battery level: below 20%."
+  level: "error"
+1003:
+  message: "Low charge level: below 30%. No charging source detected."
+  level: "warning"
+1004:
+  message: "Cell imbalance exceeds 0.1V. Immediate balancing required."
+  level: "critical"
+1005:
+  message: "Cell imbalance exceeds 0.05V. Balancing recommended."
+  level: "error"
+1006:
+  message: "Average cell voltage below 3.0V. May cause battery damage."
+  level: "critical"
+1007:
+  message: "Average cell voltage below 3.2V. Values outside normal range."
+  level: "error"
+1008:
+  message: "Average cell voltage above 4.3V. May damage battery."
+  level: "critical"
+1009:
+  message: "Average cell voltage above 4.2V. Values outside normal range."
+  level: "error"
+1010:
+  message: "Battery temperature exceeded 60C. Risk of overheating."
+  level: "critical"
+1011:
+  message: "Battery temperature exceeded 50C. Risk of overheating."
+  level: "error"
+1012:
+  message: "Charge current exceeded 100A. Risk of overheating or damage."
+  level: "critical"
+1013:
+  message: "Charge current exceeded 80A. Risk of overheating or damage."
+  level: "error"
+1014:
+  message: "Discharge current exceeded -100A. Risk of overheating or damage."
+  level: "critical"
+1015:
+  message: "Discharge current exceeded -80A. Risk of overheating or damage."
+  level: "error"
+1016:
+  message: "State of Health (SOH) dropped below 90%. Significant degradation."
+  level: "critical"
+1017:
+  message: "State of Health (SOH) dropped below 80%. Significant degradation."
+  level: "error"
+1018:
+  message: "Cell resistance exceeded 0.5 Ohm. Possible cell issue."
+  level: "critical"
+1019:
+  message: "Cell resistance exceeded 0.3 Ohm. Possible cell issue."
+  level: "error"
+1020:
+  message: "Total battery voltage exceeded 55V. Out of safe range."
+  level: "critical"
+1021:
+  message: "Total battery voltage exceeded 51V. Out of safe range."
+  level: "error"
+1022:
+  message: "Total battery voltage dropped below 41V. Out of safe range."
+  level: "critical"
+1023:
+  message: "Total battery voltage dropped below 43V. Out of safe range."
+  level: "error"
+1024:
+  message: "Emergency shutdown countdown below 5 min. Investigate immediately."
+  level: "critical"
+1025:
+  message: "Emergency shutdown countdown below 10 min. Investigate immediately."
+  level: "error"
+1026:
+  message: "Charge/discharge cycle count exceeded 2000. Battery efficiency declining."
+  level: "warning"
+1027:
+  message: "Charge/discharge cycle count exceeded 1500. Battery efficiency declining."
+  level: "warning"

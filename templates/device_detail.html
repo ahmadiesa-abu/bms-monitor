@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}{{ device.name or device.address }} - JK-BMS Monitor{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>{{ device.name or device.address }}</h1>
+    <a href="{{ url_for('devices_page') }}" class="btn btn-sm">Back to Devices</a>
+</div>
+
+<div class="detail-section">
+    <h2>Device Information</h2>
+    <div class="info-grid">
+        <div class="info-item"><span class="info-label">Address</span><span class="info-value">{{ device.address }}</span></div>
+        <div class="info-item"><span class="info-label">Vendor</span><span class="info-value">{{ device.vendor_id or 'N/A' }}</span></div>
+        <div class="info-item"><span class="info-label">Hardware</span><span class="info-value">{{ device.hardware_version or 'N/A' }}</span></div>
+        <div class="info-item"><span class="info-label">Software</span><span class="info-value">{{ device.software_version or 'N/A' }}</span></div>
+        <div class="info-item"><span class="info-label">Serial</span><span class="info-value">{{ device.serial_number or 'N/A' }}</span></div>
+        <div class="info-item"><span class="info-label">Manufacturing Date</span><span class="info-value">{{ device.manufacturing_date or 'N/A' }}</span></div>
+        <div class="info-item"><span class="info-label">Uptime</span><span class="info-value" id="uptime-val">{{ device.device_uptime or 0 }}s</span></div>
+        <div class="info-item"><span class="info-label">Power On Count</span><span class="info-value">{{ device.power_on_count or 0 }}</span></div>
+    </div>
+</div>
+
+<div class="detail-section">
+    <h2>Live Cell Info</h2>
+    <div id="live-cell-info" class="live-section">Loading...</div>
+</div>
+
+<div class="detail-section">
+    <h2>Settings</h2>
+    <div id="device-settings" class="live-section">Loading...</div>
+</div>
+
+<script>
+async function loadDeviceInfo() {
+    try {
+        const resp = await fetch('/api/cell-info');
+        if (!resp.ok) return;
+        const allInfo = await resp.json();
+        const addr = '{{ device.address }}';
+
+        let deviceData = null;
+        for (const [name, info] of Object.entries(allInfo)) {
+            if (info.device_address === addr) {
+                deviceData = info;
+                break;
+            }
+        }
+
+        if (!deviceData) {
+            document.getElementById('live-cell-info').innerHTML = '<p class="empty-state">No live data yet. Device may not be connected.</p>';
+            return;
+        }
+
+        const maxTemp = Math.max(deviceData.temperature_sensor_1||0, deviceData.temperature_sensor_2||0,
+                                 deviceData.temperature_sensor_3||0, deviceData.temperature_sensor_4||0, deviceData.temperature_sensor_5||0);
+
+        let html = `<div class="stats-grid">
+            <div class="stat"><span class="stat-label">SOC</span><span class="stat-value">${deviceData.state_of_charge}%</span></div>
+            <div class="stat"><span class="stat-label">SOH</span><span class="stat-value">${deviceData.state_of_health}%</span></div>
+            <div class="stat"><span class="stat-label">Voltage</span><span class="stat-value">${(deviceData.battery_voltage||0).toFixed(3)} V</span></div>
+            <div class="stat"><span class="stat-label">Current</span><span class="stat-value">${(deviceData.charge_current||0).toFixed(3)} A</span></div>
+            <div class="stat"><span class="stat-label">Power</span><span class="stat-value">${(deviceData.battery_power||0).toFixed(3)} W</span></div>
+            <div class="stat"><span class="stat-label">Temp Max</span><span class="stat-value">${maxTemp.toFixed(1)} C</span></div>
+            <div class="stat"><span class="stat-label">Temp 1</span><span class="stat-value">${(deviceData.temperature_sensor_1||0).toFixed(1)} C</span></div>
+            <div class="stat"><span class="stat-label">Temp 2</span><span class="stat-value">${(deviceData.temperature_sensor_2||0).toFixed(1)} C</span></div>
+            <div class="stat"><span class="stat-label">Temp 3</span><span class="stat-value">${(deviceData.temperature_sensor_3||0).toFixed(1)} C</span></div>
+            <div class="stat"><span class="stat-label">Temp 4</span><span class="stat-value">${(deviceData.temperature_sensor_4||0).toFixed(1)} C</span></div>
+            <div class="stat"><span class="stat-label">Temp 5</span><span class="stat-value">${(deviceData.temperature_sensor_5||0).toFixed(1)} C</span></div>
+            <div class="stat"><span class="stat-label">Avg Cell V</span><span class="stat-value">${(deviceData.average_voltage||0).toFixed(4)} V</span></div>
+            <div class="stat"><span class="stat-label">V Difference</span><span class="stat-value">${(deviceData.voltage_difference||0).toFixed(4)} V</span></div>
+            <div class="stat"><span class="stat-label">Remaining</span><span class="stat-value">${(deviceData.remaining_capacity||0).toFixed(3)} Ah</span></div>
+            <div class="stat"><span class="stat-label">Nominal</span><span class="stat-value">${(deviceData.nominal_capacity||0).toFixed(3)} Ah</span></div>
+            <div class="stat"><span class="stat-label">Cycles</span><span class="stat-value">${deviceData.cycle_count}</span></div>
+            <div class="stat"><span class="stat-label">Total Cycle Cap</span><span class="stat-value">${(deviceData.total_cycle_capacity||0).toFixed(3)} Ah</span></div>
+            <div class="stat"><span class="stat-label">Power Tube Temp</span><span class="stat-value">${(deviceData.power_tube_temperature||0).toFixed(1)} C</span></div>
+            <div class="stat"><span class="stat-label">Charging</span><span class="stat-value">${deviceData.charging_status ? 'Yes' : 'No'}</span></div>
+            <div class="stat"><span class="stat-label">Discharging</span><span class="stat-value">${deviceData.discharging_status ? 'Yes' : 'No'}</span></div>
+            <div class="stat"><span class="stat-label">Precharging</span><span class="stat-value">${deviceData.precharging_status ? 'Yes' : 'No'}</span></div>
+            <div class="stat"><span class="stat-label">Emergency Countdown</span><span class="stat-value">${deviceData.emergency_time_countdown}s</span></div>
+        </div>`;
+
+        if (deviceData.cell_voltages && deviceData.cell_voltages.length > 0) {
+            html += `<h3>Cell Voltages</h3><div class="cell-voltage-grid">`;
+            deviceData.cell_voltages.forEach((v, i) => {
+                const cls = v < 3.0 ? ' low' : v > 4.2 ? ' high' : '';
+                html += `<div class="cell-v${cls}"><span class="cell-num">${i+1}</span><span class="cell-val">${v.toFixed(3)}V</span></div>`;
+            });
+            html += `</div>`;
+        }
+
+        if (deviceData.cell_resistances && deviceData.cell_resistances.length > 0) {
+            html += `<h3>Cell Resistances</h3><div class="cell-voltage-grid">`;
+            deviceData.cell_resistances.forEach((r, i) => {
+                const cls = r > 0.3 ? ' high' : '';
+                html += `<div class="cell-r${cls}"><span class="cell-num">${i+1}</span><span class="cell-val">${r.toFixed(3)} Ohm</span></div>`;
+            });
+            html += `</div>`;
+        }
+
+        document.getElementById('live-cell-info').innerHTML = html;
+    } catch(e) {
+        document.getElementById('live-cell-info').innerHTML = '<p class="empty-state">Error loading data.</p>';
+    }
+}
+
+async function loadSettings() {
+    try {
+        const resp = await fetch('/api/device-settings');
+        if (!resp.ok) {
+            document.getElementById('device-settings').innerHTML = '<p class="empty-state">No settings data available.</p>';
+            return;
+        }
+        const settingsList = await resp.json();
+        const addr = '{{ device.address }}';
+        const settings = settingsList.find(s => s.address === addr);
+
+        if (!settings) {
+            document.getElementById('device-settings').innerHTML = '<p class="empty-state">No settings for this device yet.</p>';
+            return;
+        }
+
+        const groups = {
+            'Cell Configuration': ['cell_count', 'nominal_battery_capacity', 'balance_trigger_voltage', 'start_balance_voltage', 'max_balance_current'],
+            'Voltage Protection': ['cell_ovp', 'cell_ovpr', 'cell_uvp', 'cell_uvpr', 'soc_100_voltage', 'soc_0_voltage', 'power_off_voltage', 'smart_sleep_voltage', 'cell_request_charge_voltage', 'cell_request_float_voltage'],
+            'Current Protection': ['max_charge_current', 'max_discharge_current', 'charge_ocp_delay', 'charge_ocp_recovery', 'discharge_ocp_delay', 'discharge_ocp_recovery'],
+            'Temperature Protection': ['charge_otp', 'charge_otp_recovery', 'discharge_otp', 'discharge_otp_recovery', 'charge_utp', 'charge_utp_recovery', 'mos_otp', 'mos_otp_recovery'],
+            'Switches': ['charge_switch', 'discharge_switch', 'balancer_switch', 'heating_enabled', 'disable_temperature_sensors', 'display_always_on', 'special_charger', 'smart_sleep_enabled', 'timed_stored_data', 'charging_float_mode'],
+        };
+
+        let html = '';
+        for (const [group, keys] of Object.entries(groups)) {
+            html += `<div class="settings-group"><h3>${group}</h3>`;
+            for (const key of keys) {
+                const val = settings[key];
+                if (val === undefined || val === null) continue;
+                let display;
+                if (typeof val === 'boolean') display = val ? '<span class="on">ON</span>' : '<span class="off">OFF</span>';
+                else if (typeof val === 'number') display = val.toFixed ? (Number.isInteger(val) ? val : val.toFixed(3)) : val;
+                else display = val;
+                html += `<div class="setting-row"><span class="setting-key">${key.replace(/_/g, ' ')}</span><span class="setting-val">${display}</span></div>`;
+            }
+            html += `</div>`;
+        }
+
+        document.getElementById('device-settings').innerHTML = html;
+    } catch(e) {
+        document.getElementById('device-settings').innerHTML = '<p class="empty-state">Error loading settings.</p>';
+    }
+}
+
+loadDeviceInfo();
+loadSettings();
+setInterval(loadDeviceInfo, 3000);
+</script>
+{% endblock %}

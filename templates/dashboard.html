@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - JK-BMS Monitor{% endblock %}
+{% block content %}
+<div class="dashboard-header">
+    <h1>Dashboard</h1>
+    <div class="dashboard-controls">
+        <select id="history-days" class="select-input">
+            <option value="1">Today</option>
+            <option value="3">3 Days</option>
+            <option value="7">7 Days</option>
+            <option value="30">30 Days</option>
+        </select>
+    </div>
+</div>
+
+<div id="no-devices-msg" class="empty-state" style="display:none;">
+    <p>No devices connected. Go to <a href="{{ url_for('devices_page') }}">Devices</a> to scan and connect.</p>
+</div>
+
+<div id="device-cards" class="device-cards"></div>
+
+<div class="chart-section">
+    <h2>Historical Data</h2>
+    <canvas id="history-chart" height="300"></canvas>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const chartCtx = document.getElementById('history-chart');
+    let historyChart = null;
+
+    async function loadDashboard() {
+        try {
+            const resp = await fetch('/api/cell-info');
+            if (!resp.ok) {
+                document.getElementById('no-devices-msg').style.display = 'block';
+                document.getElementById('device-cards').innerHTML = '';
+                return;
+            }
+            const data = await resp.json();
+            document.getElementById('no-devices-msg').style.display = 'none';
+            renderDeviceCards(data);
+        } catch(e) {
+            document.getElementById('no-devices-msg').style.display = 'block';
+        }
+    }
+
+    function renderDeviceCards(devices) {
+        const container = document.getElementById('device-cards');
+        let html = '';
+        for (const [name, info] of Object.entries(devices)) {
+            const soc = info.state_of_charge || 0;
+            const socClass = soc < 20 ? 'critical' : soc < 40 ? 'warning' : 'ok';
+            const statusText = info.charging_status ? 'Charging' : info.discharging_status ? 'Discharging' : 'Idle';
+            const maxTemp = Math.max(info.temperature_sensor_1||0, info.temperature_sensor_2||0,
+                                     info.temperature_sensor_3||0, info.temperature_sensor_4||0, info.temperature_sensor_5||0);
+
+            html += `
+            <div class="device-card">
+                <div class="card-header">
+                    <h3>${name}</h3>
+                    <a href="/device/${info.device_address}" class="btn btn-sm">Details</a>
+                </div>
+                <div class="card-body">
+                    <div class="soc-section">
+                        <div class="soc-bar">
+                            <div class="soc-fill soc-${socClass}" style="width:${soc}%"></div>
+                        </div>
+                        <span class="soc-value">${soc}%</span>
+                        <span class="status-badge status-${socClass}">${statusText}</span>
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat">
+                            <span class="stat-label">Voltage</span>
+                            <span class="stat-value">${(info.battery_voltage||0).toFixed(2)} V</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">Current</span>
+                            <span class="stat-value">${(info.charge_current||0).toFixed(2)} A</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">Power</span>
+                            <span class="stat-value">${(info.battery_power||0).toFixed(1)} W</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">Temperature</span>
+                            <span class="stat-value">${maxTemp.toFixed(1)} C</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">Capacity</span>
+                            <span class="stat-value">${(info.remaining_capacity||0).toFixed(2)} / ${(info.nominal_capacity||0).toFixed(2)} Ah</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">SOH</span>
+                            <span class="stat-value">${info.state_of_health||0}%</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">Avg Cell V</span>
+                            <span class="stat-value">${(info.average_voltage||0).toFixed(3)} V</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">V Diff</span>
+                            <span class="stat-value">${(info.voltage_difference||0).toFixed(3)} V</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">Cycles</span>
+                            <span class="stat-value">${info.cycle_count||0}</span>
+                        </div>
+                    </div>
+                    ${info.cell_voltages && info.cell_voltages.length > 0 ? `
+                    <details class="cell-details">
+                        <summary>Cell Voltages (${info.cell_voltages.length} cells)</summary>
+                        <div class="cell-voltage-grid">
+                            ${info.cell_voltages.map((v,i) => `<div class="cell-v${v < 3.0 ? ' low' : v > 4.2 ? ' high' : ''}"><span class="cell-num">${i+1}</span><span class="cell-val">${v.toFixed(3)}V</span></div>`).join('')}
+                        </div>
+                    </details>` : ''}
+                    ${info.cell_resistances && info.cell_resistances.length > 0 ? `
+                    <details class="cell-details">
+                        <summary>Cell Resistances (${info.cell_resistances.length} cells)</summary>
+                        <div class="cell-voltage-grid">
+                            ${info.cell_resistances.map((r,i) => `<div class="cell-r${r > 0.3 ? ' high' : ''}"><span class="cell-num">${i+1}</span><span class="cell-val">${r.toFixed(3)} Ohm</span></div>`).join('')}
+                        </div>
+                    </details>` : ''}
+                </div>
+            </div>`;
+        }
+        container.innerHTML = html;
+    }
+
+    async function loadChart() {
+        const days = document.getElementById('history-days').value;
+        try {
+            const resp = await fetch(`/api/aggregated-data?days=${days}`);
+            if (!resp.ok) return;
+            const rows = await resp.json();
+
+            const datasets = {};
+            for (const row of rows) {
+                const key = row.device_name || row.device_address;
+                if (!datasets[key]) datasets[key] = { power: [], soc: [], labels: [] };
+                datasets[key].labels.push(row.timestamp);
+                datasets[key].power.push(row.power);
+                datasets[key].soc.push(row.remaining_capacity);
+            }
+
+            const colors = ['#4fc3f7', '#81c784', '#ffb74d', '#e57373'];
+            const chartDatasets = [];
+            let i = 0;
+            for (const [name, d] of Object.entries(datasets)) {
+                chartDatasets.push({
+                    label: `${name} Power (W)`,
+                    data: d.power,
+                    borderColor: colors[i % colors.length],
+                    yAxisID: 'y',
+                    tension: 0.3,
+                    pointRadius: 0,
+                });
+                i++;
+            }
+
+            const allLabels = [...new Set(Object.values(datasets).flatMap(d => d.labels))].sort();
+
+            if (historyChart) historyChart.destroy();
+            historyChart = new Chart(chartCtx, {
+                type: 'line',
+                data: { labels: allLabels, datasets: chartDatasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { ticks: { color: '#aaa', maxTicksLimit: 12 }, grid: { color: '#333' } },
+                        y: { ticks: { color: '#aaa' }, grid: { color: '#333' }, title: { display: true, text: 'Power (W)', color: '#aaa' } },
+                    },
+                    plugins: { legend: { labels: { color: '#ddd' } } },
+                },
+            });
+        } catch(e) { console.error('Chart error:', e); }
+    }
+
+    loadDashboard();
+    loadChart();
+    setInterval(loadDashboard, 3000);
+    document.getElementById('history-days').addEventListener('change', loadChart);
+});
+</script>
+{% endblock %}
