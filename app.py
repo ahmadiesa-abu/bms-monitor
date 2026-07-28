@@ -22,6 +22,7 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 logging.getLogger("python.ble.connector").setLevel(logging.DEBUG)
+logging.getLogger("python.ble.manager").setLevel(logging.DEBUG)
 log = logging.getLogger(__name__)
 
 app = Flask(__name__)

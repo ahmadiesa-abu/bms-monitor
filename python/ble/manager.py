@@ -45,6 +45,7 @@ async def connect_and_run(device, active_connections_dict):
                 notify_queue = asyncio.Queue()
 
                 def handle_notification(sender, data):
+                    log.debug("RAW callback: sender=%s len=%d hex=%s", sender, len(data), data.hex())
                     notify_queue.put_nowait(data)
 
                 await client.start_notify(CHARACTERISTIC_UUID, handle_notification)
