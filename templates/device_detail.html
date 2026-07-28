@@ -133,16 +133,78 @@ async function loadSettings() {
             for (const key of keys) {
                 const val = settings[key];
                 if (val === undefined || val === null) continue;
-                let display;
-                if (typeof val === 'boolean') display = val ? '<span class="on">ON</span>' : '<span class="off">OFF</span>';
-                else if (typeof val === 'number') display = val.toFixed ? (Number.isInteger(val) ? val : val.toFixed(3)) : val;
-                else display = val;
-                html += `<div class="setting-row"><span class="setting-key">${key.replace(/_/g, ' ')}</span><span class="setting-val">${display}</span></div>`;
+                const label = key.replace(/_/g, ' ');
+                if (typeof val === 'boolean') {
+                    html += `<div class="setting-row">
+                        <span class="setting-key">${label}</span>
+                        <label class="switch">
+                            <input type="checkbox" class="setting-toggle" data-key="${key}" data-addr="${addr}" ${val ? 'checked' : ''}>
+                            <span class="slider"></span>
+                        </label>
+                        <span class="setting-val" id="val-${key}">${val ? 'ON' : 'OFF'}</span>
+                        <button class="btn btn-sm setting-save" data-key="${key}" data-addr="${addr}" style="display:none">Save</button>
+                    </div>`;
+                } else if (typeof val === 'number') {
+                    const display = Number.isInteger(val) ? val : val.toFixed(3);
+                    html += `<div class="setting-row">
+                        <span class="setting-key">${label}</span>
+                        <input type="number" class="setting-input" data-key="${key}" data-addr="${addr}" value="${val}" step="${Number.isInteger(val) ? 1 : 0.001}">
+                        <span class="setting-val">${display}</span>
+                        <button class="btn btn-sm setting-save" data-key="${key}" data-addr="${addr}">Save</button>
+                    </div>`;
+                } else {
+                    html += `<div class="setting-row"><span class="setting-key">${label}</span><span class="setting-val">${val}</span></div>`;
+                }
             }
             html += `</div>`;
         }
 
         document.getElementById('device-settings').innerHTML = html;
+
+        document.querySelectorAll('.setting-save').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const key = this.dataset.key;
+                const addr = this.dataset.addr;
+                const row = this.closest('.setting-row');
+                const input = row.querySelector('.setting-input, .setting-toggle');
+                let value;
+                if (input.type === 'checkbox') {
+                    value = input.checked;
+                } else {
+                    value = parseFloat(input.value);
+                }
+                this.disabled = true;
+                this.textContent = '...';
+                try {
+                    const resp = await fetch('/api/device-settings/write', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({address: addr, key, value})
+                    });
+                    const result = await resp.json();
+                    if (resp.ok) {
+                        this.textContent = 'Saved';
+                        setTimeout(() => { this.textContent = 'Save'; this.disabled = false; }, 2000);
+                    } else {
+                        this.textContent = result.error || 'Error';
+                        setTimeout(() => { this.textContent = 'Save'; this.disabled = false; }, 3000);
+                    }
+                } catch(e) {
+                    this.textContent = 'Error';
+                    setTimeout(() => { this.textContent = 'Save'; this.disabled = false; }, 3000);
+                }
+            });
+        });
+
+        document.querySelectorAll('.setting-toggle').forEach(toggle => {
+            toggle.addEventListener('change', function() {
+                const key = this.dataset.key;
+                const valEl = document.getElementById(`val-${key}`);
+                const saveBtn = this.closest('.setting-row').querySelector('.setting-save');
+                valEl.textContent = this.checked ? 'ON' : 'OFF';
+                saveBtn.style.display = 'inline-block';
+            });
+        });
     } catch(e) {
         document.getElementById('device-settings').innerHTML = '<p class="empty-state">Error loading settings.</p>';
     }

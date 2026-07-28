@@ -296,6 +296,41 @@ def api_device_settings():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/device-settings/write", methods=["POST"])
+@login_required
+def api_device_settings_write():
+    try:
+        data = request.get_json()
+        address = data.get("address", "").strip().lower()
+        key = data.get("key", "").strip()
+        value = data.get("value")
+
+        if not address or not key or value is None:
+            return jsonify({"error": "address, key, and value are required"}), 400
+
+        from python.ble.protocol import REGISTER_MAP, SWITCH_MAP
+        from python.ble.manager import active_connections, queue_write
+
+        if address not in active_connections:
+            return jsonify({"error": "Device is not connected"}), 400
+
+        if key in SWITCH_MAP:
+            register = SWITCH_MAP[key]
+            raw = 1 if value else 0
+            length = 4
+        elif key in REGISTER_MAP:
+            register, length, factor = REGISTER_MAP[key]
+            raw = int(round(value * factor))
+        else:
+            return jsonify({"error": f"Unknown setting: {key}"}), 400
+
+        queue_write(address, register, raw, length)
+        log.info("Queued write: %s @ %s -> %s (raw=%s)", key, address, value, raw)
+        return jsonify({"message": f"Write queued for {key}"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/aggregated-data")
 @login_required
 def api_aggregated_data():

@@ -6,7 +6,7 @@ from bleak import BleakClient
 
 from config import CHARACTERISTIC_UUID, CMD_TYPE_DEVICE_INFO, CMD_TYPE_CELL_INFO, CMD_TYPE_SETTINGS
 from python.ble.protocol import create_command
-from python.ble.connector import notification_handler
+from python.ble.connector import notification_handler, write_setting
 from python import db
 from python.data_store import data_store
 
@@ -14,6 +14,11 @@ log = logging.getLogger(__name__)
 
 active_connections = {}
 _scan_lock = asyncio.Lock()
+_pending_writes = {}
+
+
+def queue_write(device_address, register, value, length):
+    _pending_writes[device_address] = (register, value, length)
 
 
 async def connect_and_run(device, active_connections_dict):
@@ -69,6 +74,12 @@ async def connect_and_run(device, active_connections_dict):
                         await asyncio.sleep(2)
                         await client.write_gatt_char(CHARACTERISTIC_UUID, create_command(CMD_TYPE_CELL_INFO))
                         await asyncio.sleep(2)
+
+                    pending = _pending_writes.pop(device_address, None)
+                    if pending:
+                        reg, val, length = pending
+                        await write_setting(client, reg, val, length, device.name)
+                        await asyncio.sleep(3)
 
                     await asyncio.sleep(8)
 

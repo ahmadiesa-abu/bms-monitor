@@ -377,8 +377,50 @@ input[type="text"], input[type="password"], input[type="number"], select {
 }
 .setting-key { color: var(--text-dim); text-transform: capitalize; }
 .setting-val { font-weight: 600; }
+.setting-row .setting-input {
+    width: 100px;
+    padding: 0.2rem 0.4rem;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 0.8rem;
+    text-align: right;
+}
+.setting-row .setting-save { margin-left: 0.3rem; }
 .on { color: var(--success); }
 .off { color: var(--danger); }
+
+/* Toggle switch */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 36px;
+    height: 20px;
+}
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    transition: 0.2s;
+}
+.slider:before {
+    content: "";
+    position: absolute;
+    height: 14px;
+    width: 14px;
+    left: 2px;
+    bottom: 2px;
+    background: var(--text-dim);
+    border-radius: 50%;
+    transition: 0.2s;
+}
+.switch input:checked + .slider { background: var(--accent); border-color: var(--accent); }
+.switch input:checked + .slider:before { background: #fff; transform: translateX(16px); }
 
 /* Alerts table */
 .alerts-table { overflow-x: auto; }

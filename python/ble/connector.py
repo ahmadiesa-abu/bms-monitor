@@ -4,7 +4,7 @@ from bleak import BleakClient
 
 from config import CHARACTERISTIC_UUID, MIN_FRAME_SIZE, MAX_FRAME_SIZE
 from python.ble.protocol import (
-    calculate_crc, parse_device_info, parse_cell_info, parse_setting_info,
+    calculate_crc, create_write_command, parse_device_info, parse_cell_info, parse_setting_info,
 )
 from python.data_store import data_store
 
@@ -52,3 +52,9 @@ async def notification_handler(device, data, device_name, device_address, active
         else:
             log.warning("[%s] Unknown frame type %s", device_name, frame_type)
             await data_store.clear_buffer(device_name)
+
+
+async def write_setting(client, register, value, length, device_name):
+    command = create_write_command(register, value, length)
+    await client.write_gatt_char(CHARACTERISTIC_UUID, command)
+    log.info("[%s] Write sent: register=0x%02X value=%s len=%s", device_name, register, value, length)

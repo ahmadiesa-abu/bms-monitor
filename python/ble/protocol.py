@@ -1,7 +1,53 @@
+import struct
+
 from config import (
     CMD_HEADER, CMD_TYPE_DEVICE_INFO, CMD_TYPE_CELL_INFO, CMD_TYPE_SETTINGS,
     MIN_FRAME_SIZE, MAX_FRAME_SIZE,
 )
+
+
+REGISTER_MAP = {
+    "smart_sleep_voltage":          (0x01, 1, 1000),
+    "cell_uvp":                     (0x02, 4, 1000),
+    "cell_uvpr":                    (0x03, 4, 1000),
+    "cell_ovp":                     (0x04, 4, 1000),
+    "cell_ovpr":                    (0x05, 4, 1000),
+    "balance_trigger_voltage":      (0x06, 4, 1000),
+    "soc_100_voltage":              (0x07, 4, 1000),
+    "soc_0_voltage":                (0x08, 4, 1000),
+    "cell_request_charge_voltage":  (0x09, 4, 1000),
+    "cell_request_float_voltage":   (0x0A, 4, 1000),
+    "power_off_voltage":            (0x0B, 4, 1000),
+    "max_charge_current":           (0x0C, 4, 1000),
+    "charge_ocp_delay":             (0x0D, 4, 1),
+    "charge_ocp_recovery":          (0x0E, 4, 1),
+    "max_discharge_current":        (0x0F, 4, 1000),
+    "discharge_ocp_delay":          (0x10, 4, 1),
+    "discharge_ocp_recovery":       (0x11, 4, 1),
+    "short_circuit_protection_recovery": (0x12, 4, 1),
+    "max_balance_current":          (0x13, 4, 1000),
+    "charge_otp":                   (0x14, 4, 10),
+    "charge_otp_recovery":          (0x15, 4, 10),
+    "discharge_otp":                (0x16, 4, 10),
+    "discharge_otp_recovery":       (0x17, 4, 10),
+    "charge_utp":                   (0x18, 4, 10),
+    "charge_utp_recovery":          (0x19, 4, 10),
+    "mos_otp":                      (0x1A, 4, 10),
+    "mos_otp_recovery":             (0x1B, 4, 10),
+    "cell_count":                   (0x1C, 4, 1),
+    "charge_switch":                (0x1D, 4, 1),
+    "discharge_switch":             (0x1E, 4, 1),
+    "balancer_switch":              (0x1F, 4, 1),
+    "nominal_battery_capacity":     (0x20, 4, 1000),
+    "short_circuit_protection_delay": (0x21, 4, 1),
+    "start_balance_voltage":        (0x26, 4, 1000),
+}
+
+SWITCH_MAP = {
+    "charge_switch":        0x1D,
+    "discharge_switch":     0x1E,
+    "balancer_switch":      0x1F,
+}
 
 
 def calculate_crc(data):
@@ -12,6 +58,19 @@ def create_command(command_type):
     frame = bytearray(20)
     frame[:4] = CMD_HEADER
     frame[4] = command_type
+    frame[19] = calculate_crc(frame[:19])
+    return bytes(frame)
+
+
+def create_write_command(register, value, length):
+    frame = bytearray(20)
+    frame[:4] = CMD_HEADER
+    frame[4] = register
+    frame[5] = length
+    if length == 4:
+        struct.pack_into("<I", frame, 6, value)
+    else:
+        frame[6] = value & 0xFF
     frame[19] = calculate_crc(frame[:19])
     return bytes(frame)
 
