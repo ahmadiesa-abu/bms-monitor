@@ -42,6 +42,16 @@ async def connect_and_run(device, active_connections_dict):
                 break
 
             async with BleakClient(device.address) as client:
+                log.info("[%s] Connected, discovering services...", device.name)
+                for service in client.services:
+                    log.info("[%s]  Service: %s", device.name, service.uuid)
+                    for char in service.characteristics:
+                        props = ",".join(char.properties)
+                        log.info("[%s]    Char: %s props=[%s] handle=%s",
+                                 device.name, char.uuid, props, char.handle)
+                        for desc in char.descriptors:
+                            log.info("[%s]      Desc: %s", device.name, desc.uuid)
+
                 notify_queue = asyncio.Queue()
 
                 def handle_notification(sender, data):
