@@ -16,6 +16,7 @@ async def notification_handler(device, data, device_name, device_address, active
         await data_store.clear_buffer(device_name)
         return
 
+    log.debug("[%s] RAW notify: len=%d hex=%s", device_name, len(data), data.hex())
     if data[:4] == b'\x55\xAA\xEB\x90':
         await data_store.clear_buffer(device_name)
     await data_store.append_to_buffer(device_name, data)

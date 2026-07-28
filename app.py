@@ -21,6 +21,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
+logging.getLogger("python.ble.connector").setLevel(logging.DEBUG)
 log = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -269,7 +270,7 @@ def api_cell_info():
     try:
         info = run_async(data_store.get_cell_info())
         if not info:
-            return jsonify({"message": "No cell info available yet."}), 404
+            return jsonify({})
         return jsonify(info)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
