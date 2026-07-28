@@ -22,8 +22,8 @@ async def notification_handler(device, data, device_name, device_address, active
 
     buffer = await data_store.get_buffer(device_name)
     if MIN_FRAME_SIZE <= len(buffer) <= MAX_FRAME_SIZE:
-        calculated_crc = calculate_crc(buffer[:-1])
-        received_crc = buffer[-1]
+        calculated_crc = calculate_crc(buffer[:299])
+        received_crc = buffer[299]
         if calculated_crc != received_crc:
             log.warning("[%s] Invalid CRC: %s != %s", device_name, calculated_crc, received_crc)
             return
@@ -31,6 +31,8 @@ async def notification_handler(device, data, device_name, device_address, active
         frame_type = buffer[4]
         if frame_type == 0x03:
             info = parse_device_info(buffer, device_address)
+            info["name"] = info.pop("device_name")
+            info.pop("device_address", None)
             info["connected"] = True
             info["enabled"] = True
             from python import db
