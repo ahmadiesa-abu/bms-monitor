@@ -24,8 +24,12 @@ async def notification_handler(device, data, device_name, device_address, active
     buffer = await data_store.get_buffer_snapshot(device_name)
 
     if data[:4] == b'\x55\xAA\xEB\x90':
-        if buffer and len(buffer) >= MIN_FRAME_SIZE:
-            await _process_frame(buffer, device_name, device_address)
+        if buffer:
+            if len(buffer) >= MIN_FRAME_SIZE:
+                await _process_frame(buffer, device_name, device_address)
+                await data_store.clear_buffer(device_name)
+            else:
+                return
         await data_store.clear_buffer(device_name)
 
     await data_store.append_to_buffer(device_name, data)
