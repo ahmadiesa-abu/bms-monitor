@@ -35,6 +35,11 @@ class DataStore:
         async with self.lock:
             return self.response_buffers.get(device_name, bytearray())
 
+    async def get_buffer_snapshot(self, device_name):
+        async with self.lock:
+            buf = self.response_buffers.get(device_name)
+            return bytes(buf) if buf else bytearray()
+
     async def clear_buffer(self, device_name):
         async with self.lock:
             buf = self.response_buffers.get(device_name)

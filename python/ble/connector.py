@@ -20,7 +20,7 @@ async def notification_handler(device, data, device_name, device_address, active
         await data_store.clear_buffer(device_name)
     await data_store.append_to_buffer(device_name, data)
 
-    buffer = await data_store.get_buffer(device_name)
+    buffer = await data_store.get_buffer_snapshot(device_name)
     if MIN_FRAME_SIZE <= len(buffer) <= MAX_FRAME_SIZE:
         received_crc = buffer[299]
         calculated_crc = calculate_crc(buffer[:299])
