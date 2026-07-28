@@ -42,47 +42,65 @@ async def connect_and_run(device, active_connections_dict):
                 break
 
             async with BleakClient(device.address) as client:
+                notify_queue = asyncio.Queue()
+
                 def handle_notification(sender, data):
-                    asyncio.create_task(
-                        notification_handler(device, data, device.name, device_address, active_connections_dict)
-                    )
+                    notify_queue.put_nowait(data)
 
                 await client.start_notify(CHARACTERISTIC_UUID, handle_notification)
                 db.update_device_status(device_address, connected=True, enabled=True)
                 log.info("[%s] Connected and notifications started", device.name)
 
-                while True:
-                    device_data = db.get_device_by_address(device_address)
-                    if not device_data or not device_data.get("connected", False):
-                        log.info("[%s] Device disconnected, stopping polling", device.name)
-                        await data_store.clear_buffer(device.name)
-                        active_connections_dict.pop(device_address, None)
-                        break
+                async def process_notifications():
+                    while True:
+                        data = await notify_queue.get()
+                        await notification_handler(
+                            device, data, device.name, device_address, active_connections_dict
+                        )
 
-                    if "frame_type" not in device_data or device_data["frame_type"] is None:
-                        await client.write_gatt_char(CHARACTERISTIC_UUID, create_command(CMD_TYPE_DEVICE_INFO))
-                        await asyncio.sleep(2)
+                notify_task = asyncio.create_task(process_notifications())
 
-                    settings = await data_store.get_setting_info_by_address(device_address)
-                    if not settings:
-                        await client.write_gatt_char(CHARACTERISTIC_UUID, create_command(CMD_TYPE_SETTINGS))
+                try:
+                    while True:
+                        device_data = db.get_device_by_address(device_address)
+                        if not device_data or not device_data.get("connected", False):
+                            log.info("[%s] Device disconnected, stopping polling", device.name)
+                            await data_store.clear_buffer(device.name)
+                            active_connections_dict.pop(device_address, None)
+                            break
+
+                        if "frame_type" not in device_data or device_data["frame_type"] is None:
+                            await client.write_gatt_char(CHARACTERISTIC_UUID, create_command(CMD_TYPE_DEVICE_INFO))
+                            await asyncio.sleep(2)
+
+                        settings = await data_store.get_setting_info_by_address(device_address)
+                        if not settings:
+                            await client.write_gatt_char(CHARACTERISTIC_UUID, create_command(CMD_TYPE_SETTINGS))
+                            await asyncio.sleep(8)
+
+                        last_update = await data_store.get_last_cell_info_update(device.name)
+                        if not last_update or (datetime.now() - last_update).total_seconds() > 30:
+                            await client.write_gatt_char(CHARACTERISTIC_UUID, create_command(CMD_TYPE_DEVICE_INFO))
+                            await asyncio.sleep(2)
+                            await client.write_gatt_char(CHARACTERISTIC_UUID, create_command(CMD_TYPE_CELL_INFO))
+                            await asyncio.sleep(2)
+
+                        pending = _pending_writes.pop(device_address, None)
+                        if pending:
+                            reg, val, length = pending
+                            await write_setting(client, reg, val, length, device.name)
+                            await asyncio.sleep(3)
+
                         await asyncio.sleep(8)
+                finally:
+                    notify_task.cancel()
+                    try:
+                        await notify_task
+                    except asyncio.CancelledError:
+                        pass
 
-                    last_update = await data_store.get_last_cell_info_update(device.name)
-                    if not last_update or (datetime.now() - last_update).total_seconds() > 30:
-                        await client.write_gatt_char(CHARACTERISTIC_UUID, create_command(CMD_TYPE_DEVICE_INFO))
-                        await asyncio.sleep(2)
-                        await client.write_gatt_char(CHARACTERISTIC_UUID, create_command(CMD_TYPE_CELL_INFO))
-                        await asyncio.sleep(2)
-
-                    pending = _pending_writes.pop(device_address, None)
-                    if pending:
-                        reg, val, length = pending
-                        await write_setting(client, reg, val, length, device.name)
-                        await asyncio.sleep(3)
-
-                    await asyncio.sleep(8)
-
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             log.error("[%s] Connection error: %s", device.name, e)
 
