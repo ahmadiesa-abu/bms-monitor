@@ -3,8 +3,8 @@
 {% block content %}
 <h1>Settings</h1>
 
-<div class="settings-section">
-    <h2>Change Password</h2>
+<div class="panel settings-section">
+    <div class="panel-title"><h2>Change Password</h2></div>
     <form method="POST" action="{{ url_for('settings_page') }}" class="settings-form">
         <input type="hidden" name="action" value="change_password">
         <div class="form-group">
@@ -19,8 +19,8 @@
     </form>
 </div>
 
-<div class="settings-section">
-    <h2>Alert Configuration</h2>
+<div class="panel settings-section">
+    <div class="panel-title"><h2>Alert Configuration</h2></div>
     <form method="POST" action="{{ url_for('settings_page') }}" class="settings-form">
         <input type="hidden" name="action" value="update_config">
         <div class="form-group">

@@ -18,6 +18,8 @@ async def notification_handler(device, data, device_name, device_address, active
 
     if data == b'AT\r\n':
         return
+    if data[:4] == b'\xAA\x55\x90\xEB':
+        return
 
     log.debug("[%s] RAW notify: len=%d hex=%s", device_name, len(data), data.hex())
 
@@ -27,7 +29,8 @@ async def notification_handler(device, data, device_name, device_address, active
         if buffer:
             if len(buffer) >= MIN_FRAME_SIZE:
                 await _process_frame(buffer, device_name, device_address)
-                await data_store.clear_buffer(device_name)
+            elif len(buffer) >= 5 and buffer[:4] != b'\x55\xAA\xEB\x90':
+                pass
             else:
                 return
         await data_store.clear_buffer(device_name)

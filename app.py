@@ -231,7 +231,8 @@ def api_connect_device():
             from python.ble.manager import connect_and_run
             ble_device = await find_device_by_address(address)
             if ble_device:
-                await connect_and_run(ble_device, active_connections)
+                task = asyncio.create_task(connect_and_run(ble_device, active_connections))
+                active_connections[address] = task
 
         asyncio.run_coroutine_threadsafe(_connect(), loop)
         return jsonify({"message": f"Connection initiated for {address}."})
@@ -254,7 +255,8 @@ def api_disconnect_device():
 
     task = active_connections.pop(address, None)
     if task:
-        task.cancel()
+        loop = get_event_loop()
+        loop.call_soon_threadsafe(task.cancel)
 
     disconnect_device_sync(address)
 

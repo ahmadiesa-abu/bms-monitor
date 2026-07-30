@@ -1,5 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Dashboard - JK-BMS Monitor{% endblock %}
+
+{% block device_tabs %}
+<div id="device-tab-strip" class="device-tab-strip"></div>
+{% endblock %}
+
 {% block content %}
 <div class="dashboard-header">
     <h1>Dashboard</h1>
@@ -13,175 +18,263 @@
     </div>
 </div>
 
-<div id="no-devices-msg" class="empty-state" style="display:none;">
-    <p>No devices connected. Go to <a href="{{ url_for('devices_page') }}">Devices</a> to scan and connect.</p>
+<div id="dashboard-empty" class="empty-state" style="display:none;">
+    <p>No devices registered. Go to <a href="{{ url_for('devices_page') }}">Devices</a> to scan and connect.</p>
 </div>
 
-<div id="device-cards" class="device-cards"></div>
+<div id="dashboard-content" style="display:none;">
 
-<div class="chart-section">
-    <h2>Historical Data</h2>
-    <canvas id="history-chart" height="300"></canvas>
+    <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-title">
+            <h2>Major Status</h2>
+            <span id="status-strip" class="status-strip"></span>
+        </div>
+        <div class="major-status-grid">
+            <div class="panel gauge-panel" id="gauge-voltage"></div>
+            <div class="panel gauge-panel" id="gauge-current"></div>
+            <div id="status-tiles" class="status-tile-grid"></div>
+        </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:16px;">
+        <div class="secondary-status-grid">
+            <div class="capacity-panel">
+                <h2>Capacity</h2>
+                <div id="capacity-ring"></div>
+            </div>
+            <div class="warning-panel">
+                <h2>Warning List</h2>
+                <div id="warning-list" class="warning-list">
+                    <p class="empty-state" style="padding:12px 0;">No active warnings.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel cell-grid-panel" style="margin-bottom:16px;" id="temp-panel">
+        <h2>Temperatures</h2>
+        <div id="temp-grid" class="status-tile-grid"></div>
+    </div>
+
+    <div class="panel cell-grid-panel" style="margin-bottom:16px;">
+        <h2>Cells Voltage</h2>
+        <div id="cell-voltage-grid" class="cell-voltage-grid"></div>
+    </div>
+
+    <div class="panel cell-grid-panel" style="margin-bottom:16px;" id="cell-resistance-panel">
+        <h2>Cell Resistances</h2>
+        <div id="cell-resistance-grid" class="cell-voltage-grid"></div>
+    </div>
+
+    <div class="panel chart-section">
+        <h2>Historical Data</h2>
+        <canvas id="history-chart" height="300"></canvas>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     const chartCtx = document.getElementById('history-chart');
     let historyChart = null;
+    let currentAddress = null;
+    let currentDevices = [];
 
-    async function loadDashboard() {
-        try {
-            const resp = await fetch('/api/cell-info');
-            if (!resp.ok) {
-                document.getElementById('no-devices-msg').style.display = 'block';
-                document.getElementById('device-cards').innerHTML = '';
-                return;
-            }
-            const data = await resp.json();
-            document.getElementById('no-devices-msg').style.display = 'none';
-            renderDeviceCards(data);
-        } catch(e) {
-            document.getElementById('no-devices-msg').style.display = 'block';
-        }
+    function fmt(v, decimals) {
+        if (v === undefined || v === null || isNaN(v)) return '0';
+        return Number(v).toFixed(decimals != null ? decimals : 1);
     }
 
-    function renderDeviceCards(devices) {
-        const container = document.getElementById('device-cards');
-        let html = '';
-        for (const [name, info] of Object.entries(devices)) {
-            const soc = info.state_of_charge || 0;
-            const socClass = soc < 20 ? 'critical' : soc < 40 ? 'warning' : 'ok';
-            const statusText = info.charging_status ? 'Charging' : info.discharging_status ? 'Discharging' : 'Idle';
-            const maxTemp = Math.max(info.temperature_sensor_1||0, info.temperature_sensor_2||0,
-                                     info.temperature_sensor_3||0, info.temperature_sensor_4||0, info.temperature_sensor_5||0);
+    function renderStatusTiles(info) {
+        const tiles = [
+            { label: 'Charge', on: !!info.charging_status, isLed: true },
+            { label: 'Discharge', on: !!info.discharging_status, isLed: true },
+            { label: 'Precharging', on: !!info.precharging_status, isLed: true },
+            { label: 'Battery Power', value: fmt(info.battery_power, 1) + ' W' },
+            { label: 'Cycle Count', value: info.cycle_count || 0 },
+            { label: 'Cycle Capacity', value: fmt(info.total_cycle_capacity, 1) + ' AH' },
+            { label: 'State of Health', value: (info.state_of_health || 0) + '%' },
+            { label: 'MOS Temp', value: fmt(info.power_tube_temperature, 1) + ' \u00b0C' },
+            { label: 'Ave. Cell Volt.', value: fmt(info.average_voltage, 3) + ' V' },
+            { label: 'Cell Volt. Diff.', value: fmt(info.voltage_difference, 3) + ' V' },
+            { label: 'Remaining', value: fmt(info.remaining_capacity, 2) + ' AH' },
+            { label: 'Nominal', value: fmt(info.nominal_capacity, 2) + ' AH' },
+        ];
 
-            html += `
-            <div class="device-card">
-                <div class="card-header">
-                    <h3>${name}</h3>
-                    <a href="/device/${info.device_address}" class="btn btn-sm">Details</a>
-                </div>
-                <div class="card-body">
-                    <div class="soc-section">
-                        <div class="soc-bar">
-                            <div class="soc-fill soc-${socClass}" style="width:${soc}%"></div>
-                        </div>
-                        <span class="soc-value">${soc}%</span>
-                        <span class="status-badge status-${socClass}">${statusText}</span>
-                    </div>
-                    <div class="stats-grid">
-                        <div class="stat">
-                            <span class="stat-label">Voltage</span>
-                            <span class="stat-value">${(info.battery_voltage||0).toFixed(2)} V</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label">Current</span>
-                            <span class="stat-value">${(info.charge_current||0).toFixed(2)} A</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label">Power</span>
-                            <span class="stat-value">${(info.battery_power||0).toFixed(1)} W</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label">Temperature</span>
-                            <span class="stat-value">${maxTemp.toFixed(1)} C</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label">Capacity</span>
-                            <span class="stat-value">${(info.remaining_capacity||0).toFixed(2)} / ${(info.nominal_capacity||0).toFixed(2)} Ah</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label">SOH</span>
-                            <span class="stat-value">${info.state_of_health||0}%</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label">Avg Cell V</span>
-                            <span class="stat-value">${(info.average_voltage||0).toFixed(3)} V</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label">V Diff</span>
-                            <span class="stat-value">${(info.voltage_difference||0).toFixed(3)} V</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label">Cycles</span>
-                            <span class="stat-value">${info.cycle_count||0}</span>
-                        </div>
-                    </div>
-                    ${info.cell_voltages && info.cell_voltages.length > 0 ? `
-                    <details class="cell-details">
-                        <summary>Cell Voltages (${info.cell_voltages.length} cells)</summary>
-                        <div class="cell-voltage-grid">
-                            ${info.cell_voltages.map((v,i) => `<div class="cell-v${v < 3.0 ? ' low' : v > 4.2 ? ' high' : ''}"><span class="cell-num">${i+1}</span><span class="cell-val">${v.toFixed(3)}V</span></div>`).join('')}
-                        </div>
-                    </details>` : ''}
-                    ${info.cell_resistances && info.cell_resistances.length > 0 ? `
-                    <details class="cell-details">
-                        <summary>Cell Resistances (${info.cell_resistances.length} cells)</summary>
-                        <div class="cell-voltage-grid">
-                            ${info.cell_resistances.map((r,i) => `<div class="cell-r${r > 0.3 ? ' high' : ''}"><span class="cell-num">${i+1}</span><span class="cell-val">${r.toFixed(3)} Ohm</span></div>`).join('')}
-                        </div>
-                    </details>` : ''}
-                </div>
+        document.getElementById('status-tiles').innerHTML = tiles.map((t) => {
+            if (t.isLed) {
+                return `<div class="status-tile">
+                    <span class="tile-label"><span class="led${t.on ? ' on' : ''}"></span>${t.label}</span>
+                    <span class="tile-value ${t.on ? 'state-on' : 'state-off'}">${t.on ? 'ON' : 'OFF'}</span>
+                </div>`;
+            }
+            return `<div class="status-tile">
+                <span class="tile-label">${t.label}</span>
+                <span class="tile-value">${t.value}</span>
             </div>`;
+        }).join('');
+    }
+
+    function renderTemps(info) {
+        const temps = [1, 2, 3, 4, 5].map((n) => info['temperature_sensor_' + n]).filter((v) => v !== undefined);
+        if (temps.length === 0) {
+            document.getElementById('temp-panel').style.display = 'none';
+            return;
         }
-        container.innerHTML = html;
+        document.getElementById('temp-panel').style.display = '';
+        document.getElementById('temp-grid').innerHTML = [1, 2, 3, 4, 5].map((n) => {
+            const v = info['temperature_sensor_' + n];
+            if (v === undefined) return '';
+            return `<div class="status-tile">
+                <span class="tile-label">Battery Temp. ${n}</span>
+                <span class="tile-value">${fmt(v, 1)} \u00b0C</span>
+            </div>`;
+        }).join('');
+    }
+
+    function renderCellGrid(containerId, values, kind) {
+        const el = document.getElementById(containerId);
+        if (!values || values.length === 0) {
+            el.innerHTML = '<p class="empty-state" style="grid-column:1/-1;padding:16px 0;">No cell data yet.</p>';
+            return;
+        }
+        el.innerHTML = values.map((v, i) => {
+            let cls = '';
+            if (kind === 'voltage') {
+                cls = v < 3.0 ? ' low' : v > 4.2 ? ' high' : '';
+                return `<div class="cell-v${cls}"><span class="cell-num">${String(i + 1).padStart(2, '0')}</span><span class="cell-val">${v.toFixed(3)}V</span></div>`;
+            }
+            cls = v > 0.3 ? ' high' : '';
+            return `<div class="cell-r${cls}"><span class="cell-num">${String(i + 1).padStart(2, '0')}</span><span class="cell-val">${v.toFixed(3)} Ohm</span></div>`;
+        }).join('');
+    }
+
+    function renderWarnings(alerts, address) {
+        const el = document.getElementById('warning-list');
+        const relevant = (alerts || []).filter((a) => a.device_address === address).slice(0, 8);
+        if (relevant.length === 0) {
+            el.innerHTML = '<p class="empty-state" style="padding:12px 0;">No active warnings.</p>';
+            return;
+        }
+        el.innerHTML = relevant.map((a) => `<div class="warning-row">
+            <span class="badge badge-${a.level}">${a.level}</span>
+            <span>${a.message}</span>
+        </div>`).join('');
+    }
+
+    async function loadData() {
+        if (!currentAddress) return;
+        try {
+            const [cellResp, alertsResp] = await Promise.all([
+                fetch('/api/cell-info'),
+                fetch('/api/alerts'),
+            ]);
+
+            if (!cellResp.ok) return;
+            const allInfo = await cellResp.json();
+            let info = null;
+            for (const [name, data] of Object.entries(allInfo)) {
+                if (data.device_address === currentAddress) { info = data; break; }
+            }
+
+            if (!info) {
+                document.getElementById('status-strip').innerHTML = '<span class="badge badge-unknown">No live data yet</span>';
+                return;
+            }
+
+            const device = currentDevices.find((d) => d.address === currentAddress);
+            document.getElementById('status-strip').innerHTML =
+                `<span class="badge ${device && device.connected ? 'badge-ok' : 'badge-critical'}">${device && device.connected ? 'Connected' : 'Disconnected'}</span>`;
+
+            const voltage = info.battery_voltage || 0;
+            const current = info.charge_current || 0;
+            const vMax = BmsGauge.niceCeil(Math.max(voltage * 1.3, 20));
+            const iMax = BmsGauge.niceSymmetric(Math.abs(current));
+
+            BmsGauge.renderGauge('gauge-voltage', { min: 0, max: vMax, value: voltage, label: `Voltage (${fmt(voltage, 2)})`, unit: 'V', decimals: 2 });
+            BmsGauge.renderGauge('gauge-current', { min: -iMax, max: iMax, value: current, label: `Current (${fmt(current, 1)})`, unit: 'A', decimals: 1 });
+            BmsGauge.renderRing('capacity-ring', { value: info.state_of_charge || 0 });
+
+            renderStatusTiles(info);
+            renderTemps(info);
+            renderCellGrid('cell-voltage-grid', info.cell_voltages, 'voltage');
+            renderCellGrid('cell-resistance-grid', info.cell_resistances, 'resistance');
+
+            if (alertsResp.ok) {
+                const alerts = await alertsResp.json();
+                renderWarnings(alerts, currentAddress);
+            }
+        } catch (e) {
+            console.error('Dashboard load error:', e);
+        }
     }
 
     async function loadChart() {
+        if (!currentAddress) return;
         const days = document.getElementById('history-days').value;
         try {
             const resp = await fetch(`/api/aggregated-data?days=${days}`);
             if (!resp.ok) return;
-            const rows = await resp.json();
+            const rows = (await resp.json()).filter((r) => r.device_address === currentAddress);
 
-            const datasets = {};
-            for (const row of rows) {
-                const key = row.device_name || row.device_address;
-                if (!datasets[key]) datasets[key] = { power: [], soc: [], labels: [] };
-                datasets[key].labels.push(row.timestamp);
-                datasets[key].power.push(row.power);
-                datasets[key].soc.push(row.remaining_capacity);
-            }
-
-            const colors = ['#4fc3f7', '#81c784', '#ffb74d', '#e57373'];
-            const chartDatasets = [];
-            let i = 0;
-            for (const [name, d] of Object.entries(datasets)) {
-                chartDatasets.push({
-                    label: `${name} Power (W)`,
-                    data: d.power,
-                    borderColor: colors[i % colors.length],
-                    yAxisID: 'y',
-                    tension: 0.3,
-                    pointRadius: 0,
-                });
-                i++;
-            }
-
-            const allLabels = [...new Set(Object.values(datasets).flatMap(d => d.labels))].sort();
+            const labels = rows.map((r) => r.timestamp);
+            const power = rows.map((r) => r.power);
+            const capacity = rows.map((r) => r.remaining_capacity);
 
             if (historyChart) historyChart.destroy();
             historyChart = new Chart(chartCtx, {
                 type: 'line',
-                data: { labels: allLabels, datasets: chartDatasets },
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'Power (W)', data: power, borderColor: '#2dd4bf', yAxisID: 'y', tension: 0.3, pointRadius: 0 },
+                        { label: 'Remaining Capacity (AH)', data: capacity, borderColor: '#38bdf8', yAxisID: 'y1', tension: 0.3, pointRadius: 0 },
+                    ],
+                },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
-                        x: { ticks: { color: '#aaa', maxTicksLimit: 12 }, grid: { color: '#333' } },
-                        y: { ticks: { color: '#aaa' }, grid: { color: '#333' }, title: { display: true, text: 'Power (W)', color: '#aaa' } },
+                        x: { ticks: { color: '#7fa2ba', maxTicksLimit: 12 }, grid: { color: '#1d3650' } },
+                        y: { ticks: { color: '#7fa2ba' }, grid: { color: '#1d3650' }, title: { display: true, text: 'Power (W)', color: '#7fa2ba' } },
+                        y1: { position: 'right', ticks: { color: '#7fa2ba' }, grid: { display: false }, title: { display: true, text: 'Capacity (AH)', color: '#7fa2ba' } },
                     },
-                    plugins: { legend: { labels: { color: '#ddd' } } },
+                    plugins: { legend: { labels: { color: '#e7f2f9' } } },
                 },
             });
-        } catch(e) { console.error('Chart error:', e); }
+        } catch (e) {
+            console.error('Chart error:', e);
+        }
     }
 
-    loadDashboard();
-    loadChart();
-    setInterval(loadDashboard, 3000);
-    document.getElementById('history-days').addEventListener('change', loadChart);
+    async function init() {
+        const result = await BmsDeviceTabs.initDeviceTabs({
+            containerId: 'device-tab-strip',
+            onSelect: (address) => {
+                currentAddress = address;
+                loadData();
+                loadChart();
+            },
+        });
+        currentDevices = result.devices;
+
+        if (result.devices.length === 0) {
+            document.getElementById('dashboard-empty').style.display = 'block';
+            document.getElementById('dashboard-content').style.display = 'none';
+            return;
+        }
+
+        document.getElementById('dashboard-empty').style.display = 'none';
+        document.getElementById('dashboard-content').style.display = 'block';
+        currentAddress = result.selected;
+        loadData();
+        loadChart();
+
+        document.getElementById('history-days').addEventListener('change', loadChart);
+        setInterval(loadData, 3000);
+    }
+
+    init();
 });
 </script>
 {% endblock %}

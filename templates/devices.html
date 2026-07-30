@@ -11,31 +11,33 @@
     <div id="scan-list"></div>
 </div>
 
-<h2>Registered Devices</h2>
-<div id="registered-list">
-    {% for device in devices %}
-    <div class="device-row" data-address="{{ device.address }}">
-        <div class="device-info-col">
-            <span class="device-name">{{ device.name or device.address }}</span>
-            <span class="device-addr">{{ device.address }}</span>
+<div class="panel">
+    <div class="panel-title"><h2>Registered Devices</h2></div>
+    <div id="registered-list">
+        {% for device in devices %}
+        <div class="device-row" data-address="{{ device.address }}">
+            <div class="device-info-col">
+                <span class="device-name">{{ device.name or device.address }}</span>
+                <span class="device-addr">{{ device.address }}</span>
+            </div>
+            <div class="device-status-col">
+                <span class="status-dot {{ 'connected' if device.connected else 'disconnected' }}"></span>
+                {{ 'Connected' if device.connected else 'Disconnected' }}
+            </div>
+            <div class="device-actions-col">
+                {% if device.connected %}
+                <button class="btn btn-danger btn-sm" onclick="disconnectDevice('{{ device.address }}')">Disconnect</button>
+                <a href="{{ url_for('device_detail_page', address=device.address) }}" class="btn btn-sm">Details</a>
+                {% else %}
+                <button class="btn btn-primary btn-sm" onclick="connectDevice('{{ device.address }}', '{{ device.name or device.address }}')">Connect</button>
+                <button class="btn btn-danger btn-sm" onclick="removeDevice('{{ device.address }}')">Remove</button>
+                {% endif %}
+            </div>
         </div>
-        <div class="device-status-col">
-            <span class="status-dot {{ 'connected' if device.connected else 'disconnected' }}"></span>
-            {{ 'Connected' if device.connected else 'Disconnected' }}
-        </div>
-        <div class="device-actions-col">
-            {% if device.connected %}
-            <button class="btn btn-danger btn-sm" onclick="disconnectDevice('{{ device.address }}')">Disconnect</button>
-            <a href="{{ url_for('device_detail_page', address=device.address) }}" class="btn btn-sm">Details</a>
-            {% else %}
-            <button class="btn btn-primary btn-sm" onclick="connectDevice('{{ device.address }}', '{{ device.name or device.address }}')">Connect</button>
-            <button class="btn btn-danger btn-sm" onclick="removeDevice('{{ device.address }}')">Remove</button>
-            {% endif %}
-        </div>
+        {% else %}
+        <p class="empty-state">No devices registered. Click "Scan for Devices" to discover JK-BMS units.</p>
+        {% endfor %}
     </div>
-    {% else %}
-    <p class="empty-state">No devices registered. Click "Scan for Devices" to discover JK-BMS units.</p>
-    {% endfor %}
 </div>
 
 <div id="connecting-msg" class="connecting-msg" style="display:none;">
